@@ -1,16 +1,13 @@
 -- The item BP
-local frombp = 1  -- 0 withdrawer, 1 depositer
-local tobp = 0    -- 1 withdrawer, 0 depositer
-
-
-
+local frombp  =   0  -- 0 withdrawer, 1 depositer
+local tobp    =   1    -- 1 withdrawer, 0 depositer
 local curmainbp;
 local mincap = 100
+
 Self.CloseContainers()
 Self.OpenDepot()
 Container(0):UseItem(0,true)
 curmainbp = Self.OpenMainBackpack(false):Index()
-
 
 function flytt(from,to)
   fra=Container.New(from)
