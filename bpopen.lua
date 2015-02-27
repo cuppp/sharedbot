@@ -1,29 +1,41 @@
 -- The item BP
-local dpbp    = "yellow backpack"
-local bpid    = Item.GetID(dpbp)
-local mainbp  = Self.Backpack().id
+local frombp = 1  -- 0 withdrawer, 1 depositer
+local tobp = 0    -- 1 withdrawer, 0 depositer
 
--- Close all containers
+
+
+local curmainbp;
+local mincap = 100
 Self.CloseContainers()
-
--- Open your depot
 Self.OpenDepot()
+Container(0):UseItem(0,true)
+curmainbp = Self.OpenMainBackpack(false):Index()
 
---Open BP
-local dp = Container(0);
-dp:UseItem(0,true)
 
-local curdpbp = Container.New(0);
--- Print item amountContainer(0):ItemCount()
-local icount    = curdpbp:ItemCount()
-
---OPen your own bp
-local curmainbp = Self.OpenMainBackpack(false)
-
--- Container(curdpbp):MoveItemToContainer(0)
-print(curdpbp:ItemCount())
-for i=0, curdpbp:ItemCount() do
-  print("Moved item.")
-  curdpbp:MoveItemToContainer(0,1,0)
-  sleep(500)
+function flytt(from,to)
+  fra=Container.New(from)
+  for i=0, fra:ItemCount() do
+    if Item.isContainer(fra:GetItemData(from).id) then
+      fra:UseItem(from, true)
+      flytt(from,to)
+    else
+      if Container(to):isFull() then
+        if Item.isContainer(Container(to):GetItemData(19).id) then
+          Container(to):UseItem(19,true)
+        else
+          return
+        end
+      else
+        if Self.Cap() >= 100 then
+          fra:MoveItemToContainer(from,to,19)
+        else
+          return
+        end
+      end
+    end
+    sleep(400)
+  end
 end
+
+--flytt(0,1)
+flytt(frombp,tobp)
