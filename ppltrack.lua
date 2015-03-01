@@ -1,25 +1,31 @@
-local toTrack = "Aracrel Skara"
+local toTrack
 local posX = Self.Position().x
 local posY = Self.Position().y
 
 
 -- GUI
-local textOffset = 200
+local textOffset = 230
 local hudArr = {}
 local playerGui
 local speedGui
 local speedXGui
 local speedYGui
 local avgSize = 5
+local running = false
+local pattern = 000000000
  tiles = {}
+tilesCache = {}
 -- SIZE __MUST__ BE ODD! 5,7,9
-GRID_SIZE_X         = 15
-GRID_SIZE_Y         = 15
+GRID_SIZE_X         = 13
+GRID_SIZE_Y         = 13
 GRID_OFFSET_TOP     = 20
-GRID_OFFSET_LEFT    = 20
+GRID_OFFSET_LEFT    = 50
 CENTERX             = math.ceil(GRID_SIZE_X/2)
 CENTERY             = math.ceil(GRID_SIZE_Y/2)
 CENTERPOS           = math.ceil((GRID_SIZE_X*GRID_SIZE_X)/2)
+
+local limX = math.floor(GRID_SIZE_X/2)
+local limY = math.floor(GRID_SIZE_Y/2)
 
 function positionLoop()
   for name, creatureobj in Creature.iPlayers(7) do
@@ -40,6 +46,12 @@ end
 function playerOnScreen(charobj)
   local speed     = {lastX, lastY, vecX = 0, vecY = 0, ms = 0, lastdiff = 0, set = 0}
   local speedLog  = {totalS = {}, speedX = {}, speedY = {}}
+  for l=0, avgSize do
+    speedLog["totalS"][l] = 0
+    speedLog["speedX"][l] = 0
+    speedLog["speedY"][l] = 0
+  end
+
   local i = 0
   while charobj:isOnScreen(false) do
     local lastX = charobj:Position()["x"]
@@ -62,14 +74,6 @@ function playerOnScreen(charobj)
         local avges = {total = 0, x = 0, y = 0}
 
         for l=0, #speedLog["totalS"] do
-          --[[ if (i > 2) then
-            if (math.abs(speedLog["speedX"][i]-speedLog["speedX"][i-1]) > 2) then
-              averageSpeed = {total = 0, x = 0, y = 0}
-              i = 0
-              break
-            end
-          end
-           ]]
 
           avges.total = avges.total + speedLog["totalS"][l]
           avges.x = avges.x + speedLog["speedX"][l]
@@ -84,13 +88,11 @@ function playerOnScreen(charobj)
         if i == avgSize then
           i = 0
         end
-
       end
-
       if (vecX ~= speed["vecX"] or vecY ~= speed["vecY"]) then
         speed["vecX"] = vectX;
         speed["vecY"] = vectY;
-        updateGrid(charobj:Position()["x"], charobj:Position()["y"],  charobj:Position()["z"], averageSpeed)
+        updateGrid(Self.Position(), charobj:Position()["x"], charobj:Position()["y"],  charobj:Position()["z"], averageSpeed)
       end
 
       speed["lastX"] = lastX;
@@ -99,7 +101,6 @@ function playerOnScreen(charobj)
       speed["ms"]    = os.clock()
     end
 
-
   end
   hudArr[math.ceil((GRID_SIZE_X*GRID_SIZE_X)/2)]:SetTextColor(255, 0, 0)
   Module.New("track", positionLoop, true)
@@ -107,57 +108,139 @@ function playerOnScreen(charobj)
   return
 end
 
-function getGreenVal(cur, avg, avgTot, i, lim)
-  local m = 255*math.abs(avg)/avgTot - (math.abs(i)/lim)*255 + cur;
+function canAnalyze(x, y, z)
+  pat = 0
+  for i = -1, 1 do
+    for j = -1, 1 do
+      if (not tilesCache[x+j]) then
+        return false
+      end
+      if (not tilesCache[x+j][y + i]) then
+        return false
+      end
+      if (not tilesCache[x+j][y + i][z]) then
+        return false
+      end
+      if (not tilesCache[x+j][y + i][z].set) then
+        return false
+      end
+
+      print(i .. " " .. j)
+    end
+  end
+  return true
+end
+
+function getGreenVal(obj, avg, avgTot, i, lim, j)
+  local negative = 1
+  local simmax = 200
+  if (canAnalyze(obj.x, obj.y, obj.z) == true) then
+    print(obj.x .. " " .. obj.y .. " " .. obj.z .. " " .. obj.val)
+    if (not tilesCache[obj.x][obj.y - 1][obj.z].walkable) and (not tilesCache[obj.x][obj.y + 1][obj.z].walkable) then
+      negative = 3
+    elseif (not tilesCache[obj.x - 1][obj.y][obj.z].walkable) and (not tilesCache[obj.x + 1][obj.y][obj.z].walkable) then
+      negative = 3
+    end
+  end
+
+  local m = (simmax*math.abs(avg)/avgTot - (math.abs(j)/lim)*simmax - (math.abs(i)/lim)*simmax + obj.val)*negative;
   if m <= 0 then
     return 0
-  elseif (cur >= 255) then
+  elseif (obj.val >= 255) then
     return 255
   else
     return m
   end
 
 end
-function updateGrid(x, y, z, avges)
-  local limX = math.floor(GRID_SIZE_X/2)
-  local limY = math.floor(GRID_SIZE_Y/2)
-  tiles = {}
-  n = 1
+function updateGrid(posarr, x, y, z, avges)
+
+  -- Y VALUE FIRST
+  for i= limY * -1, limX do
+    -- X VALUE SECOND
+    for j= limX * -1, limY do
+      --Check if cached X
+      if (not tilesCache[x+j]) then
+        tilesCache[x+j] = {}
+      end
+      -- Check if cached Y
+      if (not tilesCache[x+j][y+i]) then
+        tilesCache[x+j][y+i] = {}
+      end
+      -- Check if cached Z
+      if (not tilesCache[x+j][y+i][z]) then
+        tilesCache[x+j][y+i][z] = {}
+        tilesCache[x+j][y+i][z].set = false;
+        tilesCache[x+j][y+i][z].val = 0;
+        tilesCache[x+j][y+i][z].x = x+j;
+        tilesCache[x+j][y+i][z].y = y+i;
+        tilesCache[x+j][y+i][z].z = z;
+      end
+
+      -- Set tile to not hold a player by default
+      tilesCache[x+j][y+i][z].hasPlayer = false;
+
+      -- Check if we are out of our view
+      if (math.abs(posarr.x - (x+j) )) > 7 then
+      elseif (math.abs(posarr.y - (y+i) )) > 5 then
+      else
+        -- Check if value is set, if not set it and add defaults
+        if (not tilesCache[x+j][y+i][z].set) then
+          tilesCache[x+j][y+i][z].walkable = Map.IsTileWalkable(x+j, y+i, z)
+          tilesCache[x+j][y+i][z].set = true;
+        end
+
+        tilesCache[x+j][y+i][z].val = 0;
+        -- If the tile is walkable
+        if (tilesCache[x+j][y+i][z].walkable) then
+          -- Check if we are on the west side of the map
+          if (j < 0 and avges.x > 0) then
+            tilesCache[x+j][y+i][z].val  = getGreenVal(tilesCache[x+j][y+i][z], avges.x, avges.total, i, limY, j)
+          elseif (j > 0 and avges.x < 0) then
+            tilesCache[x+j][y+i][z].val  = getGreenVal(tilesCache[x+j][y+i][z], avges.x, avges.total, i, limY, j)
+          end
+
+          if (i < 0 and avges.y > 0) then
+            tilesCache[x+j][y+i][z].val  = getGreenVal(tilesCache[x+j][y+i][z], avges.y, avges.total, j, limY, i)
+          elseif (i > 0 and avges.y < 0) then
+            tilesCache[x+j][y+i][z].val  = getGreenVal(tilesCache[x+j][y+i][z], avges.y, avges.total, j, limY, i)
+          end
+
+        end
+      end
+
+    end
+  end
+
+  for name, creatureobj in Creature.iPlayers(5) do
+    local pos = creatureobj:Position()
+    tilesCache[pos.x][pos.y][pos.z].hasPlayer = true;
+  end
+
+
+  drawMap(x, y, z)
+end
+
+function drawMap(x, y, z)
+  local n = 1
   for i= limY * -1, limX do
     for j= limX * -1, limY do
-      if n ~= CENTERPOS then
-        tiles[n] = {}
-        if Map.IsTileWalkable(x+j, y+i, z) then
-
-          tiles[n].g = 0
-          tiles[n].b  = 255
-          tiles[n].r  = 0
-          -- BEGIN
-            if (j < 0 and avges.x > 0) then
-
-              tiles[n].g  = getGreenVal(tiles[n].g, avges.x, avges.total, i, limY)
-            elseif (j > 0 and avges.x < 0) then
-              tiles[n].g = getGreenVal(tiles[n].g, avges.x, avges.total, i, limY)
-            end
-
-            if (i < 0 and avges.y > 0) then
-              tiles[n].g  = getGreenVal(tiles[n].g, avges.y, avges.total, j, limY)
-            elseif (i > 0 and avges.y < 0) then
-              tiles[n].g  = getGreenVal(tiles[n].g, avges.y, avges.total, j, limY)
-            end
-
-
-        else
-          tiles[n].r  = 255
-          tiles[n].g  = 0
-          tiles[n].b  = 0
-        end
-        hudArr[n]:SetTextColor(tiles[n].r, tiles[n].g, tiles[n].b)
+      if (i == 0) and (j == 0) then
+        hudArr[n]:SetTextColor(125,255,0)
+      elseif (not tilesCache[x+j][y+i][z].set) then
+        hudArr[n]:SetTextColor(255,0,0)
+      elseif (tilesCache[x+j][y+i][z].hasPlayer) then
+        hudArr[n]:SetTextColor(255,0,255)
+      elseif (tilesCache[x+j][y+i][z].walkable) then
+        hudArr[n]:SetTextColor(0,tilesCache[x+j][y+i][z].val,255)
+      else
+        hudArr[n]:SetTextColor(255,0,0)
       end
       n = n + 1
     end
   end
 end
+
 
 function updateSpeedGui(total, x, y)
     speedGui:SetText("Total speed: "..total )
@@ -183,10 +266,7 @@ end
 function drawGui()
   for i=0, GRID_SIZE_Y-1 do
     for y=0, GRID_SIZE_X-1 do
-      hudArr[#hudArr+1] = HUD.New(GRID_OFFSET_TOP + y*12, i*12, "@", 255, 0, 0)
-      tiles[#hudArr+1] = {}
-      tiles[#hudArr+1]["r"] = 255
-      print(tiles[#hudArr+1].r)
+      hudArr[#hudArr+1] = HUD.New(GRID_OFFSET_TOP + y*12, GRID_OFFSET_LEFT + i*12, "@", 255, 0, 0)
     end
   end
 
@@ -196,8 +276,30 @@ function drawGui()
   speedYGui  =  HUD.New(12, textOffset + 60, "Vertical: 0", 255, 0, 0)
 end
 
-Module.New("track", positionLoop, true)
-drawGui()
+function channelspeak(c, ppl)
+  c:SendYellowMessage("Client", "Target updated")
+  toTrack = ppl
+
+  if running == true then
+    Module("track"):Stop()
+  else
+    drawGui()
+  end
+
+  running = true
+  Module.New("track", positionLoop, true)
+
+end
+
+function channelclose()
+
+end
+
+
+
+local c = Channel.New("AlphaWaller", channelspeak, channelclose)
+c:SendOrangeMessage("TestWare", "Type a target name:")
+
 
 
 --Creature:isOnScreen(multifloor)
